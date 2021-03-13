@@ -1,9 +1,9 @@
 ﻿using System;
 namespace HealthEdgeApi.Model
 {
-    public class QueryOptions
+    public class Activity
     {
-        public QueryOptions()
+        public Activity()
         {
         }
     }
