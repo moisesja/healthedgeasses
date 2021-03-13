@@ -118,7 +118,7 @@ namespace HealthEdgeApi.Controllers
             }
             catch (Exception exc)
             {
-                _logger.LogError(exc, "Error while posting offeror.");
+                _logger.LogError(exc, "Error while posting inventory item.");
                 return StatusCode(StatusCodes.Status500InternalServerError);
             }
         }
@@ -152,7 +152,39 @@ namespace HealthEdgeApi.Controllers
             }
             catch (Exception exc)
             {
-                _logger.LogError(exc, "Error while putting offeror.");
+                _logger.LogError(exc, "Error while putting inventory item.");
+                return StatusCode(StatusCodes.Status500InternalServerError);
+            }
+        }
+
+        [HttpDelete("{name}")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public IActionResult Delete(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return BadRequest();
+            }
+
+            try
+            {
+                var key = name.ToLower();
+
+                if (!_inventory.ContainsKey(key))
+                {
+                    return NotFound();
+                }
+
+                _inventory.Remove(key, out InventoryItem item);
+
+                return NoContent();
+            }
+            catch (Exception exc)
+            {
+                _logger.LogError(exc, $"Error while deleting inventory item {name}.");
                 return StatusCode(StatusCodes.Status500InternalServerError);
             }
         }
