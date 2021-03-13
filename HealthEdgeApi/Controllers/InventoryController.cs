@@ -48,6 +48,8 @@ namespace HealthEdgeApi.Controllers
             _logger = logger;
         }
 
+        #region Pure RESTful
+
         [HttpGet]
         [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ICollection<InventoryItem>))]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -188,5 +190,42 @@ namespace HealthEdgeApi.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError);
             }
         }
+
+        #endregion
+
+        #region This is not REST
+
+        /// <summary>
+        /// Highest quantity (user queries the inventory for the Highest quantity item)
+        /// </summary>
+        /// <returns></returns>
+        [HttpGet]
+        [Route("~/GetHighestQuantity")]
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ICollection<InventoryItem>))]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public IActionResult GetHighestQuantity()
+        {
+            try
+            {
+                // Get the max value first
+                // We do this because it is possible to have several items with the
+                //  same quantity
+                var quantity = _inventory.Values.Max(_ => _.Quantity);
+
+                return Ok(_inventory.Values.Where(_ => _.Quantity == quantity)
+                    .ToList());
+            }
+            catch (Exception exc)
+            {
+                _logger.LogError(exc, $"Error while getting highest quantity item.");
+                return StatusCode(StatusCodes.Status500InternalServerError);
+            }
+        }
+
+        /*
+         * - Lowest quantity (user queries the inventory for the Highest quantity item)- Oldest item- Newest item- Any additional functionality you might think will be useful to the user.
+         */
+
+        #endregion
     }
 }
