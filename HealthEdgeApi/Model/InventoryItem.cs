@@ -13,5 +13,7 @@ namespace HealthEdgeApi.Model
 
         [Required]
         public DateTime CreatedOn { get; set; }
+
+        public string GetKeyName() => Name.ToLower();
     }
 }

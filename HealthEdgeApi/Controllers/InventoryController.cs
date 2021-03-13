@@ -14,6 +14,7 @@ namespace HealthEdgeApi.Controllers
     public class InventoryController : ControllerBase
     {
         private static readonly ConcurrentDictionary<string, InventoryItem> _inventory;
+        private static readonly ConcurrentDictionary<string, Activity> _activityCounters;
 
         private readonly ILogger<InventoryController> _logger;
 
@@ -21,26 +22,42 @@ namespace HealthEdgeApi.Controllers
         {
             // C# 9.0 construct
             _inventory = new();
+            _activityCounters = new();
 
-            _inventory.GetOrAdd("apples", new InventoryItem()
+            // Throw away iterator
+            List<InventoryItem> items = new()
+            {
+                new()
                 {
                     Name = "Apples",
                     Quantity = 3,
                     CreatedOn = DateTime.Parse("2020-01-01")
-                });
-
-            _inventory.GetOrAdd("oranges", new InventoryItem()
+                },
+                new()
                 {
                     Name = "Oranges",
                     Quantity = 7,
                     CreatedOn = DateTime.Parse("2020-02-01")
-                });
+                },
+                new()
+                {
+                    Name = "Pomegranates",
+                    Quantity = 55,
+                    CreatedOn = DateTime.Parse("2020-02-10")
+                }
+            };
 
-            _inventory.GetOrAdd("pomegranates", new InventoryItem()
+            items.ForEach(item =>
             {
-                Name = "Pomegranates",
-                Quantity = 55,
-                CreatedOn = DateTime.Parse("2020-02-10")
+                // Add to the Inventory Indexer
+                _inventory.GetOrAdd(item.GetKeyName(), item);
+
+                // Add to the Activity Index
+                _activityCounters.GetOrAdd(item.GetKeyName(), new Activity()
+                {
+                    ItemName = item.GetKeyName(),
+                    Count = 1
+                });
             });
         }
 
@@ -98,9 +115,18 @@ namespace HealthEdgeApi.Controllers
 
                     case QueryOptions.MostActivity:
 
-                        return null;
+                        // Get the highest count
+                        var highestActivity = _activityCounters.Values.Max(_ => _.Count);
+
+                        // Find the items with the highest activity and return them from the inventory
+                        return Ok((from activityKey
+                                    in _activityCounters.Values.Where(_ => _.Count == highestActivity)
+                                        .Select(_ => _.ItemName)
+                                    join inventoryKey in _inventory.Keys on activityKey equals inventoryKey
+                                    select _inventory[inventoryKey]).ToList());
 
                     default: // None
+                        // All
                         return Ok(_inventory.Values);
                 }
             }
@@ -144,28 +170,42 @@ namespace HealthEdgeApi.Controllers
         }
 
         [HttpPost]
-        [ProducesResponseType(StatusCodes.Status201Created, Type = typeof(InventoryItem))]
+        [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public IActionResult Post([FromBody] InventoryItem item)
+        public IActionResult Post([FromBody] InventoryItem[] items)
         {
             try
             {
-                var key = item.Name.ToLower();
-
-                if (_inventory.ContainsKey(key))
+                foreach (var item in items)
                 {
-                    return Conflict();
+                    // When updating
+                    if (_inventory.ContainsKey(item.GetKeyName()))
+                    {
+                        // Update inventory
+                        _inventory[item.GetKeyName()] = item;
+
+                        // Increase activity
+                        _activityCounters[item.GetKeyName()].Count++;
+                    }
+                    else
+                    {
+                        // Add to the Inventory Indexer
+                        _inventory.GetOrAdd(item.GetKeyName(), item);
+
+                        // Add to the Activity Index
+                        _activityCounters.GetOrAdd(item.GetKeyName(), new Activity()
+                        {
+                            ItemName = item.GetKeyName(),
+                            Count = 1
+                        });
+                    }
                 }
-
-                _inventory.GetOrAdd(key, item);
-
-                return Created($"/api/inventory/{key}", item);
+                return Ok();
             }
             catch (Exception exc)
             {
-                _logger.LogError(exc, "Error while posting inventory item.");
+                _logger.LogError(exc, "Error while posting inventory items.");
                 return StatusCode(StatusCodes.Status500InternalServerError);
             }
         }
@@ -183,16 +223,26 @@ namespace HealthEdgeApi.Controllers
         {
             try
             {
-                var key = item.Name.ToLower();
-
-                if (_inventory.ContainsKey(key))
+                // When updating
+                if (_inventory.ContainsKey(item.GetKeyName()))
                 {
-                    // Update
-                    _inventory[key] = item;
+                    // Update inventory
+                    _inventory[item.GetKeyName()] = item;
+
+                    // Increase activity
+                    _activityCounters[item.GetKeyName()].Count++;
                 }
                 else
                 {
-                    _inventory.GetOrAdd(key, item);
+                    // Add to the Inventory Indexer
+                    _inventory.GetOrAdd(item.GetKeyName(), item);
+
+                    // Add to the Activity Index
+                    _activityCounters.GetOrAdd(item.GetKeyName(), new Activity()
+                    {
+                        ItemName = item.GetKeyName(),
+                        Count = 1
+                    });
                 }
 
                 return Accepted($"/api/inventory/{item.Name}", item);
@@ -226,6 +276,7 @@ namespace HealthEdgeApi.Controllers
                 }
 
                 _inventory.Remove(key, out InventoryItem item);
+                _activityCounters.Remove(key, out Activity act);
 
                 return NoContent();
             }
