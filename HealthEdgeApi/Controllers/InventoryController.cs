@@ -19,7 +19,8 @@ namespace HealthEdgeApi.Controllers
 
         static InventoryController()
         {
-            _inventory = new ConcurrentDictionary<string, InventoryItem>();
+            // C# 9.0 construct
+            _inventory = new();
 
             _inventory.GetOrAdd("apples", new InventoryItem()
                 {
@@ -52,12 +53,56 @@ namespace HealthEdgeApi.Controllers
 
         [HttpGet]
         [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ICollection<InventoryItem>))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public IActionResult Get()
+        public IActionResult Get(string name = null, QueryOptions options = QueryOptions.None)
         {
+            if (options == QueryOptions.ByName && string.IsNullOrWhiteSpace(name))
+            {
+                return BadRequest();
+            }
+
             try
             {
-                return Ok(_inventory.Values.ToList());
+                switch (options)
+                {
+                    case QueryOptions.HighestQuantity:
+                    case QueryOptions.LowestQuantity:
+
+                        // Get the quantity that satisfies the request
+                        // We do this because it is possible to have several items with the
+                        //  same quantity
+                        var quantity = (options == QueryOptions.HighestQuantity ?
+                            _inventory.Values.Max(_ => _.Quantity) :
+                            _inventory.Values.Min(_ => _.Quantity));
+
+                        return Ok(_inventory.Values.Where(_ => _.Quantity == quantity)
+                            .ToList());
+
+                    case QueryOptions.OldestItem:
+                    case QueryOptions.NewestItem:
+
+                        // Get the date that satisfies the request
+                        // We do this because it is possible to have several items with the
+                        //  same date
+                        var date = (options == QueryOptions.NewestItem ?
+                            _inventory.Values.Max(_ => _.CreatedOn) :
+                            _inventory.Values.Min(_ => _.CreatedOn));
+
+                        return Ok(_inventory.Values.Where(_ => _.CreatedOn == date)
+                            .ToList());
+
+                    case QueryOptions.ByName:
+
+                        return Ok(new List<InventoryItem>() { _inventory[name.ToLower()] });
+
+                    case QueryOptions.MostActivity:
+
+                        return null;
+
+                    default: // None
+                        return Ok(_inventory.Values);
+                }
             }
             catch (Exception exc)
             {
@@ -192,40 +237,25 @@ namespace HealthEdgeApi.Controllers
         }
 
         #endregion
+    }
 
-        #region This is not REST
+    /// <summary>
+    /// Allows the consumer to GET by any of these options
+    /// </summary>
+    public enum QueryOptions
+    {
+        // Default
+        None = 0,
 
-        /// <summary>
-        /// Highest quantity (user queries the inventory for the Highest quantity item)
-        /// </summary>
-        /// <returns></returns>
-        [HttpGet]
-        [Route("~/GetHighestQuantity")]
-        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ICollection<InventoryItem>))]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public IActionResult GetHighestQuantity()
-        {
-            try
-            {
-                // Get the max value first
-                // We do this because it is possible to have several items with the
-                //  same quantity
-                var quantity = _inventory.Values.Max(_ => _.Quantity);
+        HighestQuantity = 1,
+        LowestQuantity = 2,
+        OldestItem = 3,
+        NewestItem = 4,
 
-                return Ok(_inventory.Values.Where(_ => _.Quantity == quantity)
-                    .ToList());
-            }
-            catch (Exception exc)
-            {
-                _logger.LogError(exc, $"Error while getting highest quantity item.");
-                return StatusCode(StatusCodes.Status500InternalServerError);
-            }
-        }
+        // Redundant but specs require it
+        ByName = 5,
 
-        /*
-         * - Lowest quantity (user queries the inventory for the Highest quantity item)- Oldest item- Newest item- Any additional functionality you might think will be useful to the user.
-         */
-
-        #endregion
+        // My choice
+        MostActivity = 6,
     }
 }
