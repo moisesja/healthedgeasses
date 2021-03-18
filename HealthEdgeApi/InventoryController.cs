@@ -175,6 +175,11 @@ namespace HealthEdgeApi.Controllers
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public IActionResult Post([FromBody] InventoryItem[] items)
         {
+            if (items.Length == 0)
+            {
+                return BadRequest();
+            }
+
             try
             {
                 foreach (var item in items)
